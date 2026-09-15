@@ -91,6 +91,28 @@
   .vfy-mismatch{color:var(--red);background:rgba(255,107,96,.12)}
   .vfy-unchecked,.vfy-unavailable{color:var(--dim);background:rgba(147,161,181,.10)}
   .vfy-note{font-size:12px;color:var(--dim);line-height:1.55;margin-top:9px}
+
+  /* assessment: a stated conclusion and what it rests on */
+  .concl{padding:18px 20px;border-radius:16px;margin-bottom:18px;font-size:14.5px;line-height:1.65;
+    border:1px solid currentColor;backdrop-filter:blur(14px)}
+  .concl-high{color:var(--red);background:rgba(255,107,96,.09)}
+  .concl-med{color:#ffc857;background:rgba(255,200,87,.08)}
+  .concl-low{color:var(--green);background:rgba(63,223,135,.07)}
+  .concl b{color:var(--text)}
+  .sig{padding:13px 15px;border-radius:14px;margin-bottom:10px;
+    background:var(--glass-2);border:1px solid var(--stroke);transition:.25s}
+  .sig:hover{border-color:var(--stroke-2);transform:translateY(-1px)}
+  .sig-head{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+  .sig-name{font-weight:650;font-size:13.5px}
+  .sig-conf{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;
+    border:1px solid currentColor}
+  .conf-high{color:var(--green)} .conf-medium{color:#ffc857} .conf-low{color:var(--dim)}
+  .sig-line{font-size:12.5px;color:var(--dim);line-height:1.55}
+  .sig-line b{color:var(--text);font-weight:600}
+  .meters{display:flex;gap:20px;margin:6px 0 18px;font-size:12.5px;color:var(--dim)}
+  .meters b{display:block;color:var(--text);font-size:16px;margin-top:2px}
+  .caveat{padding:12px 15px;border-radius:13px;margin-top:16px;font-size:12.5px;line-height:1.6;
+    color:#ffd591;background:rgba(255,193,86,.08);border:1px solid rgba(255,193,86,.28)}
   .vfy-rows{margin-top:10px;font-size:12px}
   .vfy-rows div{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
   table.grid{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -221,6 +243,7 @@
  <div class="main">
   <div class="tabs">
     <button class="tab on" data-view="graph">Flow graph</button>
+    <button class="tab" data-view="assess">Assessment</button>
     <button class="tab" data-view="timeline">Timeline</button>
     <button class="tab" data-view="victims">Who sent funds here</button>
   </div>
@@ -229,6 +252,7 @@
     <div id="graph"></div>
     <div class="hint" id="hint">Paste an address above and hit <b style="color:var(--text);margin:0 4px">Investigate</b><br>
       — flow runs left → right. Click a node to inspect it, click a transfer line to open it on the explorer.</div>
+    <div class="view" id="v-assess"></div>
     <div class="view" id="v-timeline"></div>
     <div class="view" id="v-victims"></div>
     <div class="scaleview" id="scaleview" style="display:none">100%</div>
@@ -388,11 +412,22 @@ async function inspect(addr){
       api(`/api/funder?address=${addr}&chain=${c}`).catch(()=>({hops:[]})),
       api(`/api/offramp?address=${addr}&chain=${c}`).catch(()=>({offramp:null}))
     ]);
+    // A label is a claim about who controls an address — show what backs it.
+    let ev={known:false};
+    try{ ev=await api(`/api/evidence?address=${addr}`); }catch{}
+    const basis = ev.known
+      ? (ev.source
+          ? `<div class="vfy-note"><b>basis:</b> ${esc(ev.source)}</div>`
+          : `<div class="vfy-note" style="color:#ffc857">No source recorded for this label —
+             it is inherited, not evidenced. Verify before acting on it.</div>`)
+      : '';
+
     let h='';
     h+=card('Address',
       kv('address',`<span class="mono">${short(addr)}</span>`)+
       (p.label?kv('label',pill(p.type,p.label)):kv('type',pill(p.type)))+
       kv('risk',`${p.risk||0}/100`)+
+      basis+
       `<a class="btnlink" href="${addrUrl(addr)}" target="_blank" rel="noopener">Open on explorer ↗</a>`);
     h+=card('Profile',
       kv('balance',`${p.balance} ${p.symbol||''} ≈ ${fmtUsd(p.balance_usd)}`)+
@@ -420,7 +455,7 @@ async function run(){
   setStatus('tracing the chain…',false,true); loader(35);
   $('#hint').classList.add('hide');
   loaded={};                       // new address -> other views must reload
-  $('#v-timeline').innerHTML=''; $('#v-victims').innerHTML='';
+  $('#v-timeline').innerHTML=''; $('#v-victims').innerHTML=''; $('#v-assess').innerHTML='';
   try{
     const dir=$('#direction').value;
     const g=await api(`/api/trace?address=${a}&chain=${chain()}&depth=${$('#depth').value}&asset=${$('#asset').value}&direction=${dir}`);
@@ -467,10 +502,16 @@ function showView(v){
   $('#graph').style.display   = v==='graph'?'block':'none';
   $('#zoomctl').style.display = v==='graph'?'flex':'none';
   $('#scaleview').style.display = (v==='graph'&&network)?'block':'none';
+  $('#v-assess').classList.toggle('on',v==='assess');
   $('#v-timeline').classList.toggle('on',v==='timeline');
   $('#v-victims').classList.toggle('on',v==='victims');
   const a=$('#addr').value.trim();
-  if(a && !loaded[v+a]) { loaded[v+a]=true; if(v==='timeline') loadTimeline(a); if(v==='victims') loadVictims(a); }
+  if(a && !loaded[v+a]) {
+    loaded[v+a]=true;
+    if(v==='timeline') loadTimeline(a);
+    if(v==='victims') loadVictims(a);
+    if(v==='assess') loadAssessment(a);
+  }
 }
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>showView(t.dataset.view));
 
@@ -499,6 +540,42 @@ async function loadTimeline(a){
       ${t.verdict?`<div class="verdict ${calm?'calm':''}">${esc(t.verdict)}</div>`:''}
       <div class="bars">${bars}</div>
       ${t.dust_skipped?`<div class="muted" style="margin-top:14px">${t.dust_skipped} dust-sized transfers ignored (spam sent to well-known addresses).</div>`:''}`;
+  }catch(e){ el.innerHTML=`<div class="err">${esc(e.message)}</div>`; }
+}
+
+// The assessment: what the evidence supports, how strongly, and on what basis.
+// This is the part that separates a conclusion from a data dump, so every
+// signal shows its observation and its meaning rather than just a score.
+async function loadAssessment(a){
+  const el=$('#v-assess');
+  el.innerHTML='<div class="muted"><span class="spin"></span>Weighing the evidence…</div>';
+  try{
+    const r=await api(`/api/assess?address=${a}&chain=${chain()}&asset=${$('#asset').value}`);
+    const band = r.risk>=60?'high' : r.risk>=25?'med' : 'low';
+    const sigs=(r.signals||[]).map(s=>`
+      <div class="sig">
+        <div class="sig-head">
+          <span class="sig-name">${esc(s.name)}</span>
+          <span class="sig-conf conf-${s.confidence}">${s.confidence} confidence</span>
+        </div>
+        <div class="sig-line"><b>observed</b> — ${esc(s.observed)}</div>
+        <div class="sig-line"><b>means</b> — ${esc(s.implication)}</div>
+      </div>`).join('') ||
+      '<div class="muted">No distinguishing signals. That is not a clearance — an address with unremarkable flows is simply unknown.</div>';
+
+    el.innerHTML=`
+      <div class="concl concl-${band}">${esc(r.assessment)}</div>
+      <div class="meters">
+        <div>risk<b>${r.risk}/100</b></div>
+        <div>confidence<b>${esc(r.confidence)}</b></div>
+        <div>arithmetic<b>${esc(r.verification?.status||'—')}</b></div>
+        <div>received<b>${(r.totals?.received??0).toFixed(8)}</b></div>
+        <div>sent<b>${(r.totals?.sent??0).toFixed(8)}</b></div>
+      </div>
+      <h3 style="font-size:11px;letter-spacing:.09em;color:var(--dim);margin:0 0 11px">WHAT THIS RESTS ON</h3>
+      ${sigs}
+      ${(r.caveats||[]).length?`<div class="caveat"><b>Read this before quoting the above.</b><br>
+        ${r.caveats.map(c=>esc(c)).join('<br>')}</div>`:''}`;
   }catch(e){ el.innerHTML=`<div class="err">${esc(e.message)}</div>`; }
 }
 

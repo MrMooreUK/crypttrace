@@ -137,6 +137,30 @@ def create_app() -> Flask:
             return jsonify({"error": str(e)}), 400
         return jsonify(graph)
 
+    @app.route("/api/assess")
+    def api_assess():
+        """The stated conclusion and the evidence it rests on."""
+        from crypttrace import assess as assess_mod
+        addr = request.args.get("address", "")
+        chain = request.args.get("chain", "eth")
+        asset_arg = request.args.get("asset", "native")
+        bad = validate(addr, chain)
+        if bad:
+            return jsonify({"error": bad}), 400
+        try:
+            asset = assets.resolve_asset(asset_arg, chain)
+            a = assess_mod.assess(addr, chain, asset)
+        except _KNOWN_ERRORS as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify(a)
+
+    @app.route("/api/evidence")
+    def api_evidence():
+        """Why does the tool claim this address is what it says it is?"""
+        from crypttrace.labels import audit as audit_mod
+        addr = request.args.get("address", "")
+        return jsonify(audit_mod.evidence(addr))
+
     @app.route("/api/verify")
     def api_verify():
         """Cross-check the tool's totals against the chain's own figures."""

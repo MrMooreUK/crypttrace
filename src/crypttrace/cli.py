@@ -496,6 +496,52 @@ def timeline(
         console.print(f"\n[{style}]{note}[/{style}]")
 
 
+@app.command()
+def assess(
+    address: str = typer.Argument(..., help="Address to assess"),
+    chain: str = CHAIN_OPT,
+    asset: str = ASSET_OPT,
+    depth: int = typer.Option(2, "--depth", "-d", help="How far to look at onward flows"),
+):
+    """What does the evidence support? A stated conclusion, with its reasoning."""
+    from crypttrace import assess as assess_mod
+    from rich.panel import Panel
+    try:
+        asset_desc = assets.resolve_asset(asset, chain)
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    with console.status("Gathering evidence…"):
+        a = assess_mod.assess(address, chain, asset_desc, depth)
+
+    if a.get("error"):
+        console.print(f"[red]Error:[/red] {a['error']}")
+        raise typer.Exit(1)
+
+    colour = "red" if a["risk"] >= 60 else "yellow" if a["risk"] >= 25 else "green"
+    console.print(Panel(a["assessment"], title="[bold]Assessment[/bold]",
+                        border_style=colour, padding=(1, 2)))
+
+    if a["signals"]:
+        console.print("\n[bold]What this rests on[/bold]\n")
+        for s in a["signals"]:
+            c = {"high": "green", "medium": "yellow", "low": "dim"}[s["confidence"]]
+            console.print(f"  [bold]{s['name']}[/bold]  [{c}]{s['confidence']} confidence[/{c}]")
+            console.print(f"    observed : {s['observed']}")
+            console.print(f"    means    : {s['implication']}")
+            console.print()
+
+    console.print(f"  risk       : [{colour}]{a['risk']}/100[/{colour}]")
+    console.print(f"  confidence : {a['confidence']}")
+    console.print(f"  arithmetic : {a['verification']['status']}")
+
+    if a["caveats"]:
+        console.print("\n[bold yellow]Read this before quoting the above[/bold yellow]")
+        for c in a["caveats"]:
+            console.print(f"  • {c}")
+
+
 def _verdict_style(status: str) -> str:
     return {"verified": "green", "consistent": "cyan", "partial": "yellow",
             "mismatch": "bold red", "unchecked": "dim"}.get(status, "dim")
