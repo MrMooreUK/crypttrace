@@ -134,11 +134,36 @@ def _sol_rows(address: str, limit: int, token: bool, contract: Optional[str]) ->
     return rows
 
 
+USE_STORE = True      # keep a local copy of what we fetch
+FORCE_FRESH = False   # ignore what's stored, but still store the new pull
+OFFLINE = False       # answer only from what is already stored
+
+
 def transfers(address: str, chain: str = "eth", limit: int = 1000,
-              oldest_first: bool = False, asset: Optional[dict] = None) -> List[Dict]:
-    """Normalized transfers for one asset (native by default), newest first."""
+              oldest_first: bool = False, asset: Optional[dict] = None,
+              fresh: bool = False) -> List[Dict]:
+    """Normalized transfers for one asset (native by default), newest first.
+
+    Served from the local store when it holds recent data for this address, so
+    repeat analysis costs nothing and works offline.
+    """
     check(chain)
     contract = asset.get("contract") if asset else None
+
+    from crypttrace import store
+    asset_key = (contract or "").lower()
+    skip_read = fresh or FORCE_FRESH
+    if USE_STORE and not skip_read:
+        if OFFLINE or store.is_fresh(chain, address, asset_key):
+            rows = store.load(address=address, chain=chain, contract=contract or "")
+            if rows or OFFLINE:
+                rows.sort(key=lambda r: r.get("timestamp", 0), reverse=not oldest_first)
+                return rows
+
+    if OFFLINE:
+        # nothing stored for this address and we're not allowed to fetch
+        return []
+
     try:
         if is_evm(chain):
             rows = _evm_token(address, chain, contract, limit) if asset \
@@ -157,6 +182,13 @@ def transfers(address: str, chain: str = "eth", limit: int = 1000,
             rows = []
     except _UPSTREAM_ERRORS as e:
         raise ChainError(str(e))
+
+    if USE_STORE:
+        try:
+            store.save(chain, address, rows, asset_key, complete=len(rows) < limit)
+        except Exception:
+            pass          # a store problem must never break an investigation
+
     rows.sort(key=lambda r: r.get("timestamp", 0), reverse=not oldest_first)
     return rows
 

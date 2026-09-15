@@ -25,11 +25,13 @@
   "0x5427fefa711eff984124bfbb1ab6fbf5e3da1820": {"name": "Celer: cBridge V2", "type": "bridge"},
   "0x841ce48f9446c8e281d3f1444cb859b4a6d0738c": {"name": "Celer: cBridge (old)", "type": "bridge"},
   "0x098b716b8aaf21512996dc57eb0615e2383e2f96": {"name": "Ronin Bridge Exploiter (Lazarus)", "type": "sanctioned"},
-  "0x2f2974fabc54dba33442261211c06bd20e0feefc": {"name": "AFX Trade Exploiter (Jul 2026, $24M)", "type": "scam"},
+  "0x2f2974fabc54dba33442261211c06bd20e0feefc": {"name": "AFX Trade Exploiter (Jul 2026, $24M)", "type": "scam", "chain": "eth", "source": "Lookonchain, 23 Jul 2026 - received 24.15M USDC bridged from Arbitrum, swapped to 12,467 ETH", "source_kind": "research", "added": "2026-08-01"},
 
-  "bc1qq85v2c926eg6pgxhwp6q7lf6cnsz80qs3fcu9r": {"name": "Coldcard Exploiter (Jul 2026) - consolidation", "type": "scam"},
-  "bc1qx76cae2706qd5q576feh7xq8rfcsjpf2htfhe3": {"name": "Coldcard Exploiter (Jul 2026) - 398 BTC pile", "type": "scam"},
-  "bc1q8jy96fe5lf8vfugydnte3cguk92gpev7kwtp3q": {"name": "Coldcard Exploiter (Jul 2026) - 89 BTC pile", "type": "scam"},
-  "bc1qnk4zh9qcnap2mycp56qjrgza3cc8ylrh8fecp0": {"name": "Coldcard Exploiter (Jul 2026) - relay to consolidation", "type": "scam"},
-  "bc1qc779m8gec84k3t0ffvu0pps94zheht7lr7ueyn": {"name": "Coldcard Exploiter (Jul 2026) - staging", "type": "scam"}
+  "bc1qq85v2c926eg6pgxhwp6q7lf6cnsz80qs3fcu9r": {"name": "Coldcard Exploiter (Jul 2026) - consolidation", "type": "scam", "chain": "btc", "source": "Galaxy Research flow-of-funds thread, 31 Jul 2026, based on Block (clay_garrett) analysis", "source_kind": "research", "added": "2026-08-09"},
+  "bc1qx76cae2706qd5q576feh7xq8rfcsjpf2htfhe3": {"name": "Coldcard Exploiter (Jul 2026) - 398 BTC pile", "type": "scam", "chain": "btc", "source": "Galaxy Research flow-of-funds thread, 31 Jul 2026; receipt confirmed by victim report (kevinwood)", "source_kind": "research", "added": "2026-08-09"},
+  "bc1q8jy96fe5lf8vfugydnte3cguk92gpev7kwtp3q": {"name": "Coldcard Exploiter (Jul 2026) - 89 BTC pile", "type": "scam", "chain": "btc", "source": "Galaxy Research flow-of-funds thread, 31 Jul 2026", "source_kind": "research", "added": "2026-08-09"},
+  "bc1qnk4zh9qcnap2mycp56qjrgza3cc8ylrh8fecp0": {"name": "Coldcard Exploiter (Jul 2026) - relay to consolidation", "type": "scam", "chain": "btc", "source": "Galaxy Research thread; role corrected to relay by own tracing - received 594.477 BTC from 500 addresses, forwarded 562.020", "source_kind": "research", "added": "2026-08-09"},
+  "bc1qc779m8gec84k3t0ffvu0pps94zheht7lr7ueyn": {"name": "Coldcard Exploiter (Jul 2026) - collector, absent from public lists", "type": "scam", "chain": "btc", "source": "named by victim (kevinwood, 31 Jul 2026); 491 inbound sweeps confirmed on-chain", "source_kind": "research", "added": "2026-08-09"},
+  "bc1qdaarag7729c2n4l2wnyt3hkhfpcs66n98z7uuh": {"name": "Coldcard Exploiter (Jul 2026) - collector C1", "type": "scam", "chain": "btc", "source": "own tracing: 100 inbound sweeps totalling 88.850 BTC at 01:10 UTC, forwarded to the 89 BTC pile", "source_kind": "research", "added": "2026-08-09"},
+  "bc1qh0l7q0mca3ln7wsl9luwns0jc9jhgrtft025l4": {"name": "Coldcard Exploiter (Jul 2026) - collector C2", "type": "scam", "chain": "btc", "source": "own tracing: 78 inbound sweeps totalling 0.769 BTC at 01:10 UTC; totals reconcile with chain", "source_kind": "research", "added": "2026-08-09"}
 }

@@ -26,6 +26,19 @@ ASSET_OPT = typer.Option(
 app = typer.Typer(add_completion=False, help=__doc__)
 console = Console()
 
+
+@app.callback()
+def _main(
+    fresh: bool = typer.Option(False, "--fresh",
+                               help="Ignore stored data and re-fetch from the network"),
+    offline: bool = typer.Option(False, "--offline",
+                                 help="Work only from locally stored data, no network"),
+):
+    """Options that apply to every command."""
+    # --fresh re-fetches but still stores the result; it doesn't disable the store
+    chains_mod.FORCE_FRESH = fresh
+    chains_mod.OFFLINE = offline
+
 from crypttrace import chains as chains_mod
 
 CHAIN_OPT = typer.Option("eth", "--chain", "-c",
@@ -290,6 +303,84 @@ def label(
         console.print(f"⚪ [dim]Unknown address[/dim] — no label, risk 0/100")
 
 
+labels_app = typer.Typer(help="Inspect the label database and the evidence behind it.")
+app.add_typer(labels_app, name="labels")
+
+
+@labels_app.command("audit")
+def labels_audit():
+    """Check every label: address validity, checksum, and whether a source is recorded."""
+    from crypttrace.labels import audit as audit_mod
+    a = audit_mod.audit()
+
+    console.print(f"  entries          : [bold]{a['total']}[/bold]")
+    console.print(f"  well-formed      : {a['valid']}")
+    console.print(f"  with a source    : {a['total']-len(a['unsourced'])} "
+                  f"({a['sourced_share']*100:.0f}%)")
+
+    if a["by_source"]:
+        console.print("\n  [bold]evidence behind the claims[/bold]")
+        titles = {"self-published": "published by the service itself",
+                  "official-list": "official/regulator list",
+                  "explorer-tag": "block-explorer tag",
+                  "research": "named research or own tracing",
+                  "community": "crowd-sourced", "none": "no source recorded"}
+        for kind, n in sorted(a["by_source"].items(), key=lambda kv: -kv[1]):
+            console.print(f"     {titles.get(kind, kind):<34} {n}")
+
+    if a["problems"]:
+        console.print(f"\n  [bold red]invalid addresses: {len(a['problems'])}[/bold red]")
+        for p in a["problems"][:10]:
+            console.print(f"     {p['address'][:24]}… — {p['issue']}")
+    else:
+        console.print("\n  [green]every address passes its checksum[/green]")
+
+    if a["unsourced"]:
+        console.print(f"\n  [yellow]{len(a['unsourced'])} labels carry no source[/yellow] "
+                      "— they are inherited, not evidenced. Treat them as weaker.")
+        for u in a["unsourced"][:8]:
+            console.print(f"     [dim]{u['name']} ({u['type']})[/dim]")
+
+
+@labels_app.command("why")
+def labels_why(
+    address: str = typer.Argument(..., help="Address to explain"),
+):
+    """Why does the tool claim this address is what it says? Shows the evidence."""
+    from crypttrace.labels import audit as audit_mod
+    e = audit_mod.evidence(address)
+    if not e["known"]:
+        console.print("[dim]No label for this address — the tool makes no claim about it.[/dim]")
+        console.print("[dim]Unlabelled does not mean innocent; it means unknown.[/dim]")
+        raise typer.Exit()
+    console.print(f"  claim   : [bold]{e['name']}[/bold] ({e['type']})")
+    console.print(f"  source  : {e['source'] or '[yellow]none recorded[/yellow]'}")
+    console.print(f"  kind    : {e['source_kind'] or '—'}  (strength {e['strength']}/3)")
+    if e.get("added"):
+        console.print(f"  added   : {e['added']}")
+    if not e["source"]:
+        console.print("\n  [yellow]This claim is not evidenced in the database.[/yellow] "
+                      "Verify it independently before acting on it.")
+
+
+@labels_app.command("check")
+def labels_check(
+    address: str = typer.Argument(..., help="Address to validate"),
+    chain: str = CHAIN_OPT,
+):
+    """Validate an address and its checksum, without touching the network."""
+    from crypttrace import addresses as addr_mod
+    if addr_mod.looks_like_txid(address):
+        console.print("[yellow]That is a 64-character hex string — a transaction id, "
+                      "not an address.[/yellow]")
+        raise typer.Exit(1)
+    ok, why = addr_mod.validate(address, chain)
+    style = "green" if ok else "red"
+    console.print(f"[{style}]{'valid' if ok else 'invalid'}[/{style}] — {why}")
+    if not ok:
+        raise typer.Exit(1)
+
+
 @app.command(name="update-labels")
 def update_labels():
     """Download the latest label lists (OFAC sanctions, etc.) into the local DB."""
@@ -466,6 +557,60 @@ def cluster(
     console.print(render.cluster_table(address, peers))
     console.print("\n[dim]Heuristic: addresses that co-sign inputs of one transaction are "
                   "almost always controlled by the same party. Strong lead, not proof.[/dim]")
+
+
+store_app = typer.Typer(help="Inspect and manage locally stored chain data.")
+app.add_typer(store_app, name="store")
+
+
+@store_app.command("info")
+def store_info():
+    """What is held locally — re-analysis of this data needs no network."""
+    from crypttrace import store as store_mod
+    s = store_mod.stats()
+    console.print(f"  transfers stored : [bold]{s['transfers']}[/bold]")
+    console.print(f"  addresses fetched: [bold]{s['addresses']}[/bold]")
+    for ch, n in sorted(s["by_chain"].items(), key=lambda kv: -kv[1]):
+        console.print(f"     {ch:<10} {n}")
+    console.print(f"  file             : {s['path']}")
+    console.print(f"  size             : {s['size_bytes']/1024:.0f} KB")
+    if s["addresses"]:
+        console.print("\n[dim]Add --offline to any command to work from this alone.[/dim]")
+
+
+@store_app.command("clear")
+def store_clear(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Don't ask for confirmation"),
+):
+    """Delete everything stored locally (chain data can always be re-fetched)."""
+    from crypttrace import store as store_mod
+    if not yes:
+        s = store_mod.stats()
+        confirm = typer.confirm(f"Delete {s['transfers']} stored transfers?")
+        if not confirm:
+            console.print("[dim]Kept.[/dim]")
+            raise typer.Exit()
+    store_mod.clear()
+    console.print("[green]✓ Local store cleared.[/green]")
+
+
+@store_app.command("link")
+def store_link(
+    src: str = typer.Argument(..., help="Start address"),
+    dst: str = typer.Argument(..., help="Address to look for"),
+    chain: str = CHAIN_OPT,
+    hops: int = typer.Option(4, "--hops", "-H", help="Maximum hops to search"),
+):
+    """Are two addresses connected in the data already collected?"""
+    from crypttrace import store as store_mod
+    path = store_mod.path_exists(chain, src, dst, hops)
+    if not path:
+        console.print("[dim]No path found in stored data. Trace both addresses first, "
+                      "or raise --hops.[/dim]")
+        raise typer.Exit(1)
+    console.print(f"[green]Connected in {len(path)-1} hop(s):[/green]\n")
+    for i, a in enumerate(path):
+        console.print(("  " * i) + ("└─▶ " if i else "") + a)
 
 
 @app.command()
